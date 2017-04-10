@@ -1,0 +1,64 @@
+Parameters:
+  GitHubUser:
+    Type: String
+    Default: seei
+  GitHubToken:
+    Type: String
+  GitHubRepo:
+    Type: String
+    Default: webapp2
+  GitHubBranch:
+    Type: String
+    Default: master
+  
+Resources:
+  Vpc:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/u-ecs-refarch-continuous-deployment/templates/vpc.yaml
+      Parameters:
+        Name: !Ref AWS::StackName
+        VpcCidr: 10.215.0.0/16
+        Subnet1Cidr: 10.215.10.0/24
+        Subnet2Cidr: 10.215.20.0/24
+  LoadBalancer:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/u-ecs-refarch-continuous-deployment/templates/load_balancer.yaml
+      Parameters:
+        VpcId: !GetAtt Vpc.Outputs.VpcId
+        Subnets: !GetAtt Vpc.Outputs.Subnets
+  Cluster:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/u-ecs-refarch-continuous-deployment/templates/cluster.yaml
+      Parameters:
+        VpcId: !GetAtt Vpc.Outputs.VpcId
+        Subnets: !GetAtt Vpc.Outputs.Subnets
+        SourceSecurityGroup: !GetAtt LoadBalancer.Outputs.SecurityGroup
+  Service:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/u-ecs-refarch-continuous-deployment/templates/service.yaml
+      Parameters:
+        ContainerName: webapp2
+        TargetGroup: !GetAtt LoadBalancer.Outputs.TargetGroup
+        Cluster: !GetAtt Cluster.Outputs.ClusterName
+  CodePipeline:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/u-ecs-refarch-continuous-deployment/templates/code_pipeline.yaml
+      Parameters:
+        GitHubUser: !Ref GitHubUser
+        GitHubToken: !Ref GitHubToken
+        GitHubRepo: !Ref GitHubRepo
+        GitHubBranch: !Ref GitHubBranch
+        TargetGroup: !GetAtt LoadBalancer.Outputs.TargetGroup
+        Cluster: !GetAtt Cluster.Outputs.ClusterName
+        Repository: !GetAtt Service.Outputs.Repository
+        StackName: !GetAtt Service.Outputs.StackName
+        TemplateBucket: u-ecs-refarch-continuous-deployment
+
+Outputs:
+  ServiceUrl:
+    Value: !GetAtt LoadBalancer.Outputs.ServiceUrl
